@@ -1,5 +1,5 @@
 import dash
-from dash import dcc, html, Input, Output, callback, dash_table
+from dash import dcc, html, Input, Output, callback
 import plotly.express as px
 import plotly.graph_objects as go
 import dash_bootstrap_components as dbc
@@ -17,8 +17,69 @@ from queries import (
 from config import YEARS
 
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP],
-                title="Dashboard ENEM 2014-2024 | Engenharia de Dados",
+                title="Dashboard ENEM 2019-2024 | Engenharia de Dados",
                 update_title=None)
+
+app.index_string = """
+<!DOCTYPE html>
+<html>
+    <head>
+        {%metas%}
+        <title>{%title%}</title>
+        {%favicon%}
+        {%css%}
+        <style>
+            .nav-link-dash {
+                font-weight: 600 !important;
+                cursor: pointer !important;
+                border-radius: 8px 8px 0 0 !important;
+                transition: all 0.2s ease !important;
+                color: #666 !important;
+                padding: 10px 20px !important;
+            }
+            .nav-link-dash:hover {
+                background: rgba(26,35,126,0.06) !important;
+                color: #1a237e !important;
+            }
+            .nav-link-dash.active {
+                background: white !important;
+                color: #1a237e !important;
+                border-bottom: 3px solid #1a237e !important;
+                font-weight: 700 !important;
+            }
+            .nav-tabs .nav-link {
+                border: none !important;
+            }
+            ._dash-loading {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                min-height: 200px;
+                color: #1a237e;
+                font-size: 1.2rem;
+            }
+            .rc-slider-track {
+                background-color: #1a237e !important;
+            }
+            .rc-slider-handle {
+                border-color: #1a237e !important;
+                box-shadow: 0 2px 6px rgba(26,35,126,0.3) !important;
+            }
+            .rc-slider-handle:hover {
+                border-color: #283593 !important;
+            }
+        </style>
+    </head>
+    <body>
+        {%app_entry%}
+        <footer>
+            {%config%}
+            {%scripts%}
+            {%renderer%}
+        </footer>
+    </body>
+</html>
+"""
 server = app.server
 
 data_exists, total_records = check_data_exists()
@@ -33,10 +94,11 @@ DISCIPLINAS_MAP = {
 }
 DISCIPLINAS_LIST = list(DISCIPLINAS_MAP.keys())
 DISCIPLINAS_LABELS = list(DISCIPLINAS_MAP.values())
-DISCIPLINAS_CORES = ["#3949ab", "#00897b", "#fdd835", "#e53935", "#6d4c41"]
+DISCIPLINAS_CORES = ["#636efa", "#00cc96", "#ef553b", "#ab63fa", "#ffa15a"]
 
-ESTILO_CARD = "shadow border-0 mb-3 rounded-3"
-ESTILO_CARD_HEADER = {"fontWeight": "700", "backgroundColor": "#f8f9fa", "borderBottom": "2px solid #e9ecef"}
+ESTILO_CARD = "shadow-sm border-0 mb-3 rounded-4"
+ESTILO_CARD_HEADER = {"fontWeight": "700", "backgroundColor": "#f8f9fa", "borderBottom": "2px solid #e9ecef",
+                       "borderRadius": "calc(0.5rem - 1px) calc(0.5rem - 1px) 0 0", "padding": "14px 20px"}
 
 app.layout = dbc.Container([
 
@@ -47,7 +109,7 @@ app.layout = dbc.Container([
                     html.H1("\U0001f4ca ENEM Data Analysis",
                             className="d-inline-block",
                             style={"fontWeight": "700", "fontSize": "2.2rem", "color": "white"}),
-                    html.Span(" 2014 - 2024", style={"fontSize": "1.5rem", "color": "rgba(255,255,255,0.8)"}),
+                    html.Span(" 2019 - 2024", style={"fontSize": "1.5rem", "color": "rgba(255,255,255,0.8)"}),
                 ]),
                 html.P("Pipeline de Engenharia de Dados | Analise completa dos microdados do ENEM",
                        style={"color": "rgba(255,255,255,0.7)", "fontSize": "1rem", "marginTop": "4px"}),
@@ -63,9 +125,9 @@ app.layout = dbc.Container([
             ], width=4),
         ], className="align-items-center"),
     ], style={
-        "background": "linear-gradient(135deg, #0d1b3e 0%, #1a237e 50%, #283593 100%)",
-        "padding": "28px 36px", "borderRadius": "12px", "marginBottom": "20px",
-        "boxShadow": "0 8px 32px rgba(0,0,0,0.18)"
+        "background": "linear-gradient(135deg, #0f0c29 0%, #1a237e 50%, #24243e 100%)",
+        "padding": "28px 36px", "borderRadius": "16px", "marginBottom": "24px",
+        "boxShadow": "0 12px 40px rgba(26,35,126,0.25)"
     }),
 
     dbc.Row(id="kpi-row", className="mb-3"),
@@ -85,19 +147,27 @@ app.layout = dbc.Container([
         ], width=12, className="px-3 mb-3"),
     ]),
 
-    dbc.Tabs([
-        dbc.Tab(label="\U0001f4ca Visao Geral", tab_id="geral"),
-        dbc.Tab(label="\U0001f3eb Escolas", tab_id="escola"),
-        dbc.Tab(label="\U0001f5fa Geografico", tab_id="geo"),
-        dbc.Tab(label="\U0001f465 Demografico", tab_id="demo"),
-        dbc.Tab(label="\U0001f4a1 Insights", tab_id="insights"),
-    ], id="tabs", active_tab="geral", className="mb-3", style={"fontWeight": "600"}),
+    dcc.Store(id="tab-store", data="geral"),
+
+    dbc.Nav([
+        dbc.NavLink(["\U0001f4ca Visao Geral"], id="nav-geral", n_clicks=0, active=True,
+                    className="nav-link-dash"),
+        dbc.NavLink(["\U0001f3eb Escolas"], id="nav-escola", n_clicks=0, active=False,
+                    className="nav-link-dash"),
+        dbc.NavLink(["\U0001f5fa Geografico"], id="nav-geo", n_clicks=0, active=False,
+                    className="nav-link-dash"),
+        dbc.NavLink(["\U0001f465 Demografico"], id="nav-demo", n_clicks=0, active=False,
+                    className="nav-link-dash"),
+        dbc.NavLink(["\U0001f4a1 Insights"], id="nav-insights", n_clicks=0, active=False,
+                    className="nav-link-dash"),
+    ], id="tabs", className="nav-tabs nav-fill mb-3",
+       style={"borderBottom": "2px solid #e0e0e0", "gap": "2px"}),
 
     dbc.Row([
         dbc.Col(id="tab-content", width=12)
     ])
 
-], fluid=True, style={"backgroundColor": "#f4f6f9", "minHeight": "100vh", "padding": "20px 24px"})
+], fluid=True, style={"backgroundColor": "#f0f2f6", "minHeight": "100vh", "padding": "24px 28px"})
 
 
 def _card(children, color="#1a237e", width=2, extra_class=""):
@@ -105,7 +175,9 @@ def _card(children, color="#1a237e", width=2, extra_class=""):
         dbc.Card(
             dbc.CardBody(children, className="text-center py-3"),
             className=f"border-0 shadow-sm {extra_class}",
-            style={"borderLeft": f"4px solid {color}", "borderRadius": "10px"}
+            style={"borderLeft": f"4px solid {color}", "borderRadius": "12px",
+                   "transition": "transform 0.15s, box-shadow 0.15s",
+                   ":hover": {"transform": "translateY(-2px)", "boxShadow": "0 6px 20px rgba(0,0,0,0.1)"}}
         ),
         width=width
     )
@@ -122,10 +194,22 @@ def _insight_box(text, icon="\U0001f4a1"):
         html.Span(f"{icon} ", style={"fontSize": "1.1rem"}),
         html.Span(text, style={"fontSize": "0.9rem", "color": "#555"})
     ], className="p-3 mt-2",
-       style={"backgroundColor": "#e8eaf6", "borderRadius": "8px", "borderLeft": "4px solid #1a237e"})
+       style={"backgroundColor": "#f0f4ff", "borderRadius": "10px", "borderLeft": "4px solid #1a237e",
+               "boxShadow": "0 1px 3px rgba(0,0,0,0.04)"})
+
+
+_GRAFICO_BASE = dict(
+    template="plotly_white", hovermode="x unified",
+    font=dict(family="Segoe UI, system-ui, sans-serif", size=12),
+    hoverlabel=dict(bgcolor="#1a237e", font=dict(color="white", size=12)),
+    plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+    xaxis=dict(gridcolor="rgba(0,0,0,0.06)", zerolinecolor="rgba(0,0,0,0.08)"),
+    yaxis=dict(gridcolor="rgba(0,0,0,0.06)", zerolinecolor="rgba(0,0,0,0.08)"),
+)
 
 
 def _card_w_graph(title, figure, insight_text="", width=6):
+    figure.update_layout(title=dict(text=title, font=dict(size=15, color="#1a237e")), **_GRAFICO_BASE)
     children = [dbc.CardHeader(title, style=ESTILO_CARD_HEADER), dbc.CardBody(dcc.Graph(figure=figure))]
     if insight_text:
         children.append(dbc.CardBody(_insight_box(insight_text), className="pt-0"))
@@ -245,7 +329,7 @@ def build_visao_geral(anos):
 
         pico = df_total_f.loc[df_total_f["QTD"].idxmax()] if not df_total_f.empty else None
         insight_part = f"O ano de {pico['NU_ANO']:.0f} teve o maior numero de participantes ({int(pico['QTD']):,}). " \
-                       f"Ha uma tendencia de queda nas inscricoes a partir de 2016." if pico is not None else ""
+                       f"Ha uma tendencia de queda nas inscricoes a partir de 2019." if pico is not None else ""
 
         df_dist = get_distribuicao_notas()
         df_dist_f = _filter_by_years(df_dist, selected=anos)
@@ -923,8 +1007,38 @@ def update_kpis(anos):
 
 
 @callback(
+    Output("tab-store", "data"),
+    Output("nav-geral", "active"),
+    Output("nav-escola", "active"),
+    Output("nav-geo", "active"),
+    Output("nav-demo", "active"),
+    Output("nav-insights", "active"),
+    Input("nav-geral", "n_clicks"),
+    Input("nav-escola", "n_clicks"),
+    Input("nav-geo", "n_clicks"),
+    Input("nav-demo", "n_clicks"),
+    Input("nav-insights", "n_clicks"),
+    prevent_initial_call=True,
+)
+def update_active_tab(n_geral, n_escola, n_geo, n_demo, n_insights):
+    ctx = dash.callback_context
+    if not ctx.triggered:
+        return dash.no_update, True, False, False, False, False
+    triggered_id = ctx.triggered[0]["prop_id"].split(".")[0]
+    tab_map = {
+        "nav-geral": "geral",
+        "nav-escola": "escola",
+        "nav-geo": "geo",
+        "nav-demo": "demo",
+        "nav-insights": "insights",
+    }
+    tab = tab_map.get(triggered_id, "geral")
+    return tab, tab == "geral", tab == "escola", tab == "geo", tab == "demo", tab == "insights"
+
+
+@callback(
     Output("tab-content", "children"),
-    Input("tabs", "active_tab"),
+    Input("tab-store", "data"),
     Input("year-slider", "value"),
 )
 def switch_tab(tab, anos):

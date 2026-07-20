@@ -1,10 +1,10 @@
 # ENEM Data Analysis Dashboard
 
-Pipeline de engenharia de dados e dashboard interativo para analise dos microdados do ENEM (2014-2024), processando **14.4 milhoes de registros** com visualizacoes sobre desempenho, desigualdade educacional e tendencias.
+Pipeline de engenharia de dados e dashboard interativo para analise dos microdados do ENEM (2019-2024), processando **14.4 milhoes de registros** com visualizacoes sobre desempenho, desigualdade educacional e tendencias.
 
 ## Funcionalidades
 
-- Processamento completo de 11 anos de microdados do INEP (37.5M brutos -> 14.4M filtrados)
+- Processamento completo de 6 anos de microdados do INEP (37.5M brutos -> 14.4M filtrados, 2019-2024)
 - Tabelas pre-computadas para consultas instantaneas (< 1s)
 - Dashboard interativo com 5 abas de analise
 - Insights automaticos sobre: desempenho por disciplina, gap escola publica vs privada, disparidades regionais, impacto de renda e raca
@@ -119,7 +119,7 @@ enem-dashboard/
 - Exclusao de treineiros (`IN_TREINEIRO != 1`)
 - Presenca confirmada em todas as 4 provas objetivas (`TP_PRESENCA = 1`)
 - Notas nao nulas em todas as disciplinas
-- Remocao dos anos 2014-2018 para performance
+- Remocao dos anos 2014-2018 (apenas 2019-2024 processados)
 
 ### Precisao dos dados
 
