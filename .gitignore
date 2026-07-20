@@ -1,0 +1,42 @@
+# Database
+data/enem.db
+data/*.db
+data/*.db-journal
+data/*.db-wal
+data/*.db-shm
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.env
+.venv
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temp / Logs
+*.log
+*.out
+*.err
+app_output.txt
+app_error.txt
+app_out.txt
+app_err.txt
+
+# Downloads / large files
+downloads/
+*.zip
+*.7z
+*.csv
+*.jsonl
