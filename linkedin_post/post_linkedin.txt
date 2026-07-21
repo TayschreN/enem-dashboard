@@ -1,14 +1,42 @@
-📊 ENEM Data Dashboard — 14.4 milhões de registros analisados
+📊 Dashboard Interativo do ENEM 2019-2024 — 14.4 milhões de registros analisados
 
-Construí um pipeline de engenharia de dados e um dashboard interativo para analisar os microdados do ENEM (2019-2024). O projeto processa ~37 milhões de registros brutos do INEP, aplica filtros (remoção de treineiros, presença confirmada) e gera visualizações sobre desempenho, desigualdade educacional e tendências.
+Construí um projeto completo de engenharia de dados do zero: pipeline ETL + dashboard interativo para analisar os microdados do ENEM fornecidos pelo INEP.
 
-🔍 Principais descobertas:
-— Gap escola privada vs pública: ~57 pontos
-— Diferença entre maior e menor renda: ~111 pontos
-— Disparidade regional: Sul/Sudeste ~40-50 pts acima de Norte/Nordeste
-— Correlação mais forte: Matemática e Ciências da Natureza
+🔥 O que o projeto faz:
+— Pipeline automatizado que baixa, extrai, limpa e carrega ~37 milhões de registros brutos do site do INEP
+— Aplica filtros rigorosos (exclui treineiros, exige presença em todas as provas, remove notas nulas)
+— Gera 11 tabelas agregadas pré-computadas para consultas instantâneas (< 1 segundo)
+— Dashboard com 5 abas de visualização: Visão Geral, Escolas, Geográfico, Demográfico e Insights
 
-🛠 Stack: Python (Pandas, NumPy, Plotly Dash), SQLite, Playwright
-📁 Código aberto: github.com/TayschreN/enem-dashboard
+🔍 Principais descobertas dos dados:
 
-#engenhariadedados #enem #python #dataviz #analisededados
+📈 Desempenho:
+— Redação tem a maior média histórica; Ciências da Natureza a menor
+— Matemática e Ciências da Natureza têm a maior correlação entre si
+— A média geral se mantém estável com variação inferior a 5% no período
+
+🏫 Desigualdade Educacional:
+— Alunos de escolas privadas pontuam ~57 pontos acima de alunos de escolas públicas
+— O gap se mantém consistente ano após ano — um reflexo estrutural da educação brasileira
+
+💰 Impacto da Renda:
+— Quanto maior a renda familiar, maior a nota — diferença de ~111 pontos entre extremos
+— Fator com maior impacto isolado no desempenho
+
+🌍 Disparidade Regional:
+— Sul e Sudeste têm médias ~40-50 pontos acima de Norte e Nordeste
+— Distrito Federal frequenta o topo do ranking nacional
+
+👥 Recorte Demográfico:
+— Homens têm ~10 pontos acima na média geral
+— Mulheres se destacam em Linguagens e Redação
+— Gap racial Branco-Preto se mantém ao longo de todo o período
+
+🛠 Stack utilizada:
+Python (Pandas, NumPy) | Dash + Plotly | SQLite | Dash Bootstrap Components | Playwright
+
+📁 Código 100% open source: github.com/TayschreN/enem-dashboard
+
+💬 Qual insight te surpreendeu mais? Deixa nos comentários!
+
+#engenhariadedados #enem #python #dataviz #analisededados #dashboard
