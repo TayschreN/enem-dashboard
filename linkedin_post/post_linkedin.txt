@@ -1,0 +1,14 @@
+📊 ENEM Data Dashboard — 14.4 milhões de registros analisados
+
+Construí um pipeline de engenharia de dados e um dashboard interativo para analisar os microdados do ENEM (2019-2024). O projeto processa ~37 milhões de registros brutos do INEP, aplica filtros (remoção de treineiros, presença confirmada) e gera visualizações sobre desempenho, desigualdade educacional e tendências.
+
+🔍 Principais descobertas:
+— Gap escola privada vs pública: ~57 pontos
+— Diferença entre maior e menor renda: ~111 pontos
+— Disparidade regional: Sul/Sudeste ~40-50 pts acima de Norte/Nordeste
+— Correlação mais forte: Matemática e Ciências da Natureza
+
+🛠 Stack: Python (Pandas, NumPy, Plotly Dash), SQLite, Playwright
+📁 Código aberto: github.com/TayschreN/enem-dashboard
+
+#engenhariadedados #enem #python #dataviz #analisededados

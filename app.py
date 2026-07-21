@@ -68,6 +68,10 @@ app.index_string = """
             .rc-slider-handle:hover {
                 border-color: #283593 !important;
             }
+            .card.hover-lift:hover {
+                transform: translateY(-2px);
+                box-shadow: 0 6px 20px rgba(0,0,0,0.1) !important;
+            }
         </style>
     </head>
     <body>
@@ -137,9 +141,9 @@ app.layout = dbc.Container([
             html.Label("Selecione os anos:", style={"fontWeight": "600", "fontSize": "0.9rem", "color": "#555"}),
             dcc.RangeSlider(
                 id="year-slider",
-                min=YEARS[0], max=YEARS[-1],
-                value=[YEARS[0], YEARS[-1]],
-                marks={str(y): str(y) for y in YEARS},
+                min=2019, max=2024,
+                value=[2019, 2024],
+                marks={str(y): str(y) for y in range(2019, 2025)},
                 step=1,
                 tooltip={"placement": "top", "always_visible": True},
                 allowCross=False,
@@ -176,8 +180,7 @@ def _card(children, color="#1a237e", width=2, extra_class=""):
             dbc.CardBody(children, className="text-center py-3"),
             className=f"border-0 shadow-sm {extra_class}",
             style={"borderLeft": f"4px solid {color}", "borderRadius": "12px",
-                   "transition": "transform 0.15s, box-shadow 0.15s",
-                   ":hover": {"transform": "translateY(-2px)", "boxShadow": "0 6px 20px rgba(0,0,0,0.1)"}}
+                   "transition": "transform 0.15s, box-shadow 0.15s"}
         ),
         width=width
     )
@@ -235,7 +238,12 @@ def build_kpis(anos):
             publica = insights.get("MEDIA_PUBLICA", 0) or 0
         gap = round(privada - publica, 1)
 
-        variacao, _, _ = get_tendencia_media_geral()
+        if len(df) >= 2:
+            primeiro_val = df["MEDIA_GERAL"].iloc[0]
+            ultimo_val = df["MEDIA_GERAL"].iloc[-1]
+            variacao = round(((ultimo_val - primeiro_val) / primeiro_val) * 100, 2)
+        else:
+            variacao = 0.0
 
         melhor = df.loc[df["MEDIA_GERAL"].idxmax()]
         pior = df.loc[df["MEDIA_GERAL"].idxmin()]
@@ -285,25 +293,27 @@ def build_visao_geral(anos):
         df_corr = get_correlacao()
 
         fig_evolucao = go.Figure()
-        for disc, label, cor in zip(DISCIPLINAS_LIST, DISCIPLINAS_LABELS, DISCIPLINAS_CORES):
-            col = disc.replace("NU_NOTA_", "MEDIA_") if disc.startswith("NU_NOTA_") else disc
-            if col in df_ano.columns:
-                fig_evolucao.add_trace(go.Scatter(
-                    x=df_ano["NU_ANO"], y=df_ano[col],
-                    mode="lines+markers", name=label,
-                    line=dict(width=2.5, color=cor), marker=dict(size=6),
-                    hovertemplate="%{y:.1f}<extra></extra>"
-                ))
-        fig_evolucao.update_layout(
-            title=dict(text="Evolucao das Medias por Disciplina", font=dict(size=16)),
-            xaxis=dict(title="Ano", dtick=1), yaxis=dict(title="Media", range=[400, 700]),
-            template="plotly_white", hovermode="x unified",
-            legend=dict(orientation="h", y=-0.25), height=400,
-            margin=dict(t=50, b=60, l=60, r=20),
-            plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)"
-        )
+        if not df_ano_f.empty:
+            anos_x = df_ano_f["NU_ANO"]
+            for disc, label, cor in zip(DISCIPLINAS_LIST, DISCIPLINAS_LABELS, DISCIPLINAS_CORES):
+                col = disc.replace("NU_NOTA_", "MEDIA_") if disc.startswith("NU_NOTA_") else disc
+                if col in df_ano_f.columns and not df_ano_f[col].isna().all():
+                    fig_evolucao.add_trace(go.Scatter(
+                        x=anos_x, y=df_ano_f[col],
+                        mode="lines+markers", name=label,
+                        line=dict(width=3, color=cor, shape="spline", smoothing=0.3),
+                        marker=dict(size=8, symbol="circle", line=dict(width=1, color="white")),
+                        hovertemplate="<b>%{fullData.name}</b><br>%{x}: %{y:.1f}<extra></extra>"
+                    ))
+            fig_evolucao.update_layout(
+                xaxis=dict(title="Ano", dtick=1, showgrid=True, rangeslider=dict(visible=True, thickness=0.05)),
+                yaxis=dict(title="Media", range=[400, 700], showgrid=True, zeroline=False),
+                legend=dict(orientation="h", yanchor="top", y=-0.2, font=dict(size=11)),
+                height=440, margin=dict(b=100, t=30),
+                hovermode="x unified",
+            )
 
-        cols_media = [c for c in df_ano.columns if c.startswith("MEDIA_")]
+        cols_media = [c for c in df_ano_f.columns if c.startswith("MEDIA_")]
         insight_evol = f"Redacao tem a maior media historica, enquanto Ciencias da Natureza tem a menor. " \
                        f"Linguagens apresenta a maior estabilidade ao longo dos anos."
 
@@ -311,20 +321,29 @@ def build_visao_geral(anos):
         if not df_total_f.empty:
             fig_participacao.add_trace(go.Bar(
                 x=df_total_f["NU_ANO"], y=df_total_f["QTD"],
-                marker_color="#3949ab", marker_line=dict(width=0),
-                hovertemplate="%{y:,}<extra></extra>", showlegend=False
+                marker=dict(color="#636efa", opacity=0.65, line=dict(width=0)),
+                hovertemplate="<b>%{x}</b><br>Participantes: %{y:,}<extra></extra>",
+                showlegend=False, name="Participantes"
             ))
             fig_participacao.add_trace(go.Scatter(
                 x=df_total_f["NU_ANO"], y=df_total_f["QTD"],
-                mode="lines+markers", line=dict(color="#e53935", width=2), marker=dict(size=6),
-                hovertemplate="%{y:,}<extra></extra>", showlegend=False
+                mode="lines+markers", showlegend=False,
+                line=dict(color="#ef553b", width=2.5, shape="spline", smoothing=0.3),
+                marker=dict(size=10, symbol="diamond", color="#ef553b", line=dict(width=1.5, color="white")),
+                hovertemplate="<b>%{x}</b><br>%{y:,}<extra></extra>"
             ))
+            pico_val = df_total_f.loc[df_total_f["QTD"].idxmax()]
+            fig_participacao.add_annotation(
+                x=pico_val["NU_ANO"], y=pico_val["QTD"],
+                text=f"Pico: {int(pico_val['QTD']):,}",
+                showarrow=True, arrowhead=2, arrowsize=1.2, arrowcolor="#ef553b",
+                font=dict(size=11, color="#ef553b"), bgcolor="white", bordercolor="#ef553b", borderwidth=1,
+                ax=0, ay=-35
+            )
         fig_participacao.update_layout(
-            title=dict(text="Participacao por Ano", font=dict(size=16)),
-            xaxis=dict(title="Ano", dtick=1), yaxis=dict(title="Participantes", tickformat=","),
-            template="plotly_white", height=400,
-            margin=dict(t=50, b=60, l=60, r=20),
-            plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)"
+            xaxis=dict(title="Ano", dtick=1, showgrid=True),
+            yaxis=dict(title="Participantes", tickformat=",", showgrid=True, zeroline=False),
+            height=420,
         )
 
         pico = df_total_f.loc[df_total_f["QTD"].idxmax()] if not df_total_f.empty else None
@@ -339,19 +358,22 @@ def build_visao_geral(anos):
             faixa_order = ["0-300", "300-400", "400-500", "500-600", "600-700", "700-800", "800-1000"]
             faixa_exists = [c for c in faixa_order if c in pivot_pct.columns]
             pivot_pct = pivot_pct[faixa_exists]
+            text_for_heatmap = np.round(pivot_pct.values, 1)
+            textfont_for_heatmap = [
+                ["white" if v > 50 else "#333" for v in row]
+                for row in pivot_pct.values
+            ]
             fig_heatmap = go.Figure(data=go.Heatmap(
                 z=pivot_pct.values, x=[c.replace("-", " a ") for c in faixa_exists],
                 y=[str(int(y)) for y in pivot_pct.index],
-                colorscale="YlOrRd", text=np.round(pivot_pct.values, 1),
-                texttemplate="%{text}%", textfont=dict(size=10),
-                hovertemplate="Ano: %{y}<br>Faixa: %{x}<br>%{z:.1f}%%<extra></extra>",
+                colorscale="Blues",
+                text=text_for_heatmap,
+                texttemplate="%{text}%", textfont=dict(size=12),
+                hovertemplate="<b>%{y}</b><br>Faixa: %{x}<br>%{z:.1f}%<extra></extra>",
             ))
             fig_heatmap.update_layout(
-                title=dict(text="Distribuicao das Notas por Ano", font=dict(size=16)),
                 xaxis=dict(title="Faixa de Nota"), yaxis=dict(title="Ano"),
-                template="plotly_white", height=450,
-                margin=dict(t=50, b=60, l=60, r=20),
-                plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)"
+                height=450,
             )
             insight_heatmap = "A maior concentracao de participantes esta nas faixas de 400 a 600 pontos. " \
                               "A distribuicao e consistente entre os anos, com leve deslocamento para a direita."
@@ -360,43 +382,20 @@ def build_visao_geral(anos):
             insight_heatmap = ""
 
         fig_radar = go.Figure()
-        if not df_ano_f.empty:
-            labels_radar = ["C. Natureza", "C. Humanas", "Linguagens", "Matematica", "Redacao"]
-            cols_radar = ["MEDIA_CN", "MEDIA_CH", "MEDIA_LC", "MEDIA_MT", "MEDIA_REDACAO"]
-            for _, row in df_ano_f.iterrows():
-                values = [row.get(c, 0) for c in cols_radar]
-                if any(values):
-                    fig_radar.add_trace(go.Scatterpolar(
-                        r=values, theta=labels_radar,
-                        fill="toself", name=str(int(row["NU_ANO"])),
-                        line=dict(width=2),
-                    ))
-            fig_radar.update_layout(
-                title=dict(text="Perfil por Disciplina (Radar)", font=dict(size=16)),
-                polar=dict(radialaxis=dict(visible=True, range=[400, 700])),
-                template="plotly_white", height=450,
-                legend=dict(orientation="h", y=-0.2),
-                margin=dict(t=50, b=60, l=60, r=20),
-                paper_bgcolor="rgba(0,0,0,0)"
-            )
-            insight_radar = "O radar mostra o perfil de desempenho por disciplina. " \
-                            "Redacao e Linguagens tem as pontuacoes mais altas. " \
-                            "Ciencias da Natureza e a disciplina com menor media."
-        else:
-            fig_radar = go.Figure()
-            insight_radar = ""
+        insight_radar = ""
 
         if not df_corr.empty:
             fig_corr = px.imshow(
                 df_corr, text_auto=".2f", aspect="auto",
-                color_continuous_scale="RdBu_r", zmin=-1, zmax=1,
+                color_continuous_scale=px.colors.diverging.RdBu_r,
+                zmin=-1, zmax=1,
                 labels=dict(x="Disciplina", y="Disciplina", color="Correlacao"),
                 x=DISCIPLINAS_LABELS, y=DISCIPLINAS_LABELS,
             )
+            fig_corr.update_traces(textfont=dict(size=13, color="#333"))
             fig_corr.update_layout(
-                title=dict(text="Matriz de Correlacao entre Disciplinas", font=dict(size=16)),
-                height=420, margin=dict(t=50, b=20, l=20, r=20),
-                paper_bgcolor="rgba(0,0,0,0)"
+                height=440, margin=dict(t=50, b=20, l=20, r=20),
+                coloraxis_colorbar=dict(title="Corr", len=0.6, thickness=15, tickvals=[-1, -0.5, 0, 0.5, 1]),
             )
             insight_corr = f"Matematica e Ciencias da Natureza tem a maior correlacao " \
                            f"({df_corr.loc['NU_NOTA_MT', 'NU_NOTA_CN']:.2f}). " \
@@ -409,23 +408,29 @@ def build_visao_geral(anos):
         df_delta = get_delta_anual()
         df_delta_f = _filter_by_years(df_delta, selected=anos)
         if not df_delta_f.empty and "DELTA" in df_delta_f.columns:
+            colors_delta = ["#ef553b" if v < 0 else "#00cc96" for v in df_delta_f["DELTA"]]
             fig_delta.add_trace(go.Bar(
                 x=df_delta_f["NU_ANO"], y=df_delta_f["DELTA"],
-                marker_color=df_delta_f["COR"],
-                text=df_delta_f["DELTA"], textposition="outside",
-                hovertemplate="%{y:+.1f}<extra></extra>", showlegend=False
+                marker=dict(color=colors_delta, line=dict(width=0), opacity=0.85),
+                text=df_delta_f["DELTA"].round(1),
+                textposition="outside", textfont=dict(size=12, color="#333"),
+                hovertemplate="<b>%{x}</b><br>Delta: %{y:+.1f} pts<extra></extra>", showlegend=False
             ))
-            fig_delta.add_hline(y=0, line_color="#666", line_width=1)
+            fig_delta.add_hline(y=0, line_color="#999", line_width=1, line_dash="dash")
         fig_delta.update_layout(
-            title=dict(text="Variacao Anual da Media Geral (Delta)", font=dict(size=16)),
-            xaxis=dict(title="Ano", dtick=1), yaxis=dict(title="Delta (pontos)"),
-            template="plotly_white", height=400,
-            margin=dict(t=50, b=60, l=60, r=20),
-            plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)"
+            xaxis=dict(title="Ano", dtick=1, showgrid=False),
+            yaxis=dict(title="Delta (pontos)", showgrid=True, zeroline=False),
+            height=400,
         )
 
-        variacao, primeiro, ultimo = get_tendencia_media_geral()
-        insight_delta = f"A media geral variou {variacao:+.2f}% no periodo ({primeiro} -> {ultimo}). " \
+        if len(df_ano_f) >= 2:
+            prim = df_ano_f["MEDIA_GERAL"].iloc[0]
+            ult = df_ano_f["MEDIA_GERAL"].iloc[-1]
+            var_delta = round(((ult - prim) / prim) * 100, 2)
+        else:
+            var_delta = 0.0
+            prim = ult = 0
+        insight_delta = f"A media geral variou {var_delta:+.2f}% no periodo ({prim} -> {ult}). " \
                         f"O maior aumento ocorreu no ano com maior variacao positiva no grafico."
 
         return dbc.Row([
@@ -433,7 +438,6 @@ def build_visao_geral(anos):
             _card_w_graph("Participacao", fig_participacao, insight_part, 6),
             _card_w_graph("Distribuicao das Notas", fig_heatmap, insight_heatmap, 6),
             _card_w_graph("Variacao Anual (Delta)", fig_delta, insight_delta, 6),
-            _card_w_graph("Perfil por Disciplina (Radar)", fig_radar, insight_radar, 6),
             _card_w_graph("Correlacao entre Disciplinas", fig_corr, insight_corr, 12),
         ])
     except Exception as e:
@@ -456,19 +460,19 @@ def build_escola(anos):
         for escola in ["Publica", "Privada"]:
             dfe = df_esc_f[df_esc_f["DS_ESCOLA"] == escola]
             if not dfe.empty:
+                cor_escola = "#00cc96" if escola == "Privada" else "#636efa"
                 fig_comparacao.add_trace(go.Bar(
                     name=escola, x=dfe["NU_ANO"], y=dfe["MEDIA_GERAL"],
                     text=dfe["MEDIA_GERAL"], textposition="auto",
-                    marker_color="#00897b" if escola == "Privada" else "#78909c",
-                    hovertemplate=f"{escola}: %{{y}}<extra></extra>"
+                    textfont=dict(size=11, color="white"),
+                    marker=dict(color=cor_escola, opacity=0.88, line=dict(width=0)),
+                    hovertemplate=f"<b>{escola}</b><br>%{{x}}: %{{y}}<extra></extra>"
                 ))
         fig_comparacao.update_layout(
-            title=dict(text="Escola Publica vs Privada", font=dict(size=16)),
-            xaxis=dict(title="Ano", dtick=1), yaxis=dict(title="Media Geral"),
-            barmode="group", template="plotly_white", height=420,
-            legend=dict(orientation="h", y=-0.2),
-            margin=dict(t=50, b=60, l=60, r=20),
-            plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)"
+            xaxis=dict(title="Ano", dtick=1, showgrid=False),
+            yaxis=dict(title="Media Geral", showgrid=True, zeroline=False),
+            barmode="group", height=420, margin=dict(b=60),
+            legend=dict(orientation="h", y=-0.2, font=dict(size=11)),
         )
 
         privada_mean = df_esc_f[df_esc_f["DS_ESCOLA"] == "Privada"]["MEDIA_GERAL"].mean()
@@ -483,21 +487,22 @@ def build_escola(anos):
         gap_medio2 = round(diff.mean(), 1)
 
         fig_gap = go.Figure()
+        colors_gap = ["#00cc96" if v >= 0 else "#ef553b" for v in diff.values]
         fig_gap.add_trace(go.Bar(
             x=diff.index, y=diff.values,
-            marker_color=["#e53935" if v > 0 else "#2e7d32" for v in diff.values],
-            text=diff.values.round(1), textposition="auto",
-            hovertemplate="Diferenca: %{y:.1f} pts<extra></extra>",
+            marker=dict(color=colors_gap, line=dict(width=0), opacity=0.85),
+            text=diff.values.round(1), textposition="outside",
+            textfont=dict(size=11, color="#333"),
+            hovertemplate="<b>%{x}</b><br>Gap: %{y:.1f} pts<extra></extra>",
             showlegend=False
         ))
-        fig_gap.add_hline(y=gap_medio2, line_dash="dash", line_color="#666",
-                          annotation_text=f"Media: {gap_medio2}", annotation_position="bottom right")
+        fig_gap.add_hline(y=gap_medio2, line_dash="dash", line_color="#999",
+                          annotation_text=f"Media: {gap_medio2} pts", annotation_position="bottom right",
+                          annotation_font=dict(size=11, color="#666"))
         fig_gap.update_layout(
-            title=dict(text=f"Gap Privada - Publica (media: {gap_medio2} pts)", font=dict(size=16)),
-            xaxis=dict(title="Ano", dtick=1), yaxis=dict(title="Diferenca (pontos)"),
-            template="plotly_white", height=400,
-            margin=dict(t=50, b=60, l=60, r=20),
-            plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)"
+            xaxis=dict(title="Ano", dtick=1, showgrid=False),
+            yaxis=dict(title="Diferenca (pontos)", showgrid=True, zeroline=False),
+            height=400,
         )
         insight_gap = f"O maior gap ocorreu em {diff.idxmax():.0f} ({diff.max():.1f} pts) " \
                       f"e o menor em {diff.idxmin():.0f} ({diff.min():.1f} pts)."
@@ -505,28 +510,33 @@ def build_escola(anos):
         df_raca_esc = get_media_raca_escola()
         fig_inter = go.Figure()
         if not df_raca_esc.empty:
-            for cor in ["Branca", "Preta", "Parda"]:
-                dfc = df_raca_esc[df_raca_esc["DS_COR_RACA"] == cor]
-                for _, row in dfc.iterrows():
-                    fig_inter.add_trace(go.Bar(
-                        name=f"{cor} - {row['DS_ESCOLA']}",
-                        x=[cor], y=[row["MEDIA_GERAL"]],
-                        marker_color="#00897b" if row["DS_ESCOLA"] == "Privada" else "#78909c",
-                        hovertemplate=f"{row['DS_ESCOLA']}: %{{y}}<extra>{cor}</extra>",
-                        showlegend=True,
-                        legendgroup=row["DS_ESCOLA"],
-                    ))
+            escola_colors_intersec = {"Privada": "#00cc96", "Publica": "#636efa"}
+            for escola_tipo in ["Publica", "Privada"]:
+                df_esc_tipo = df_raca_esc[df_raca_esc["DS_ESCOLA"] == escola_tipo]
+                df_esc_tipo = df_esc_tipo.set_index("DS_COR_RACA").reindex(["Branca", "Preta", "Parda"])
+                fig_inter.add_trace(go.Bar(
+                    name=escola_tipo,
+                    x=df_esc_tipo.index, y=df_esc_tipo["MEDIA_GERAL"].values,
+                    marker_color=escola_colors_intersec[escola_tipo],
+                    marker=dict(opacity=0.85, line=dict(width=0)),
+                    text=df_esc_tipo["MEDIA_GERAL"].round(1).values,
+                    textposition="auto", textfont=dict(size=11, color="white"),
+                    hovertemplate=f"<b>%{{x}}</b><br>{escola_tipo}: %{{y:.1f}}<extra></extra>",
+                ))
             fig_inter.update_layout(
-                title=dict(text="Nota por Raca e Tipo de Escola", font=dict(size=16)),
-                xaxis=dict(title="Raca/Cor"), yaxis=dict(title="Media Geral"),
-                barmode="group", template="plotly_white", height=400,
-                legend=dict(orientation="h", y=-0.3),
-                margin=dict(t=50, b=80, l=60, r=20),
+                title=dict(text="Nota por Raca e Tipo de Escola", font=dict(size=15)),
+                xaxis=dict(title="Raca/Cor"), yaxis=dict(title="Media Geral", zeroline=False),
+                barmode="group", template="plotly_white", height=420,
+                legend=dict(orientation="h", y=-0.25, font=dict(size=11)),
+                margin=dict(t=50, b=70, l=60, r=20),
                 plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)"
             )
             gap_branco_preto = df_raca_esc[df_raca_esc["DS_COR_RACA"] == "Branca"]["MEDIA_GERAL"].mean() - \
                                df_raca_esc[df_raca_esc["DS_COR_RACA"] == "Preta"]["MEDIA_GERAL"].mean()
+            gap_priv_pub = df_raca_esc[df_raca_esc["DS_ESCOLA"] == "Privada"]["MEDIA_GERAL"].mean() - \
+                           df_raca_esc[df_raca_esc["DS_ESCOLA"] == "Publica"]["MEDIA_GERAL"].mean()
             insight_inter = f"O gap entre estudantes brancos e pretos e de ~{gap_branco_preto:.0f} pontos. " \
+                            f"Entre escola privada e publica, a diferenca e de ~{gap_priv_pub:.0f} pontos. " \
                             f"A intersecao de raca e tipo de escola revela desigualdades estruturais profundas."
         else:
             insight_inter = ""
@@ -580,14 +590,18 @@ def build_geografico(anos):
                 locations="SG_UF_PROVA", featureidkey="properties.sigla",
                 color="MEDIA_GERAL", hover_name="SG_UF_PROVA",
                 hover_data={"MEDIA_GERAL": ":.1f", "QTD": True},
-                color_continuous_scale=["#d32f2f", "#fbc02d", "#388e3c", "#1a237e"],
+                color_continuous_scale=px.colors.sequential.Plasma_r,
                 title=None, height=500,
             )
-            fig_map.update_geos(scope="south america", showframe=False, bgcolor="rgba(0,0,0,0)")
+            fig_map.update_traces(hovertemplate="<b>%{hovertext}</b><br>Media: %{z:.1f}<br>Participantes: %{customdata[0]:,}<extra></extra>")
+            fig_map.update_geos(scope="south america", showframe=False, bgcolor="rgba(0,0,0,0)",
+                                projection=dict(type="mercator"),
+                                showcountries=True, countrycolor="rgba(0,0,0,0.1)",
+                                showsubunits=True, subunitcolor="rgba(0,0,0,0.1)")
             fig_map.update_layout(
                 margin=dict(t=10, b=10, l=10, r=10),
                 paper_bgcolor="rgba(0,0,0,0)", geo_bgcolor="rgba(0,0,0,0)",
-                coloraxis_colorbar=dict(title="Media", len=0.6)
+                coloraxis_colorbar=dict(title="Media", len=0.6, thickness=15, tickprefix=""),
             )
         except Exception:
             fig_map = go.Figure()
@@ -608,47 +622,52 @@ def build_geografico(anos):
         fig_bar = go.Figure()
         fig_bar.add_trace(go.Bar(
             y=top5["SG_UF_PROVA"][::-1], x=top5["MEDIA_GERAL"][::-1],
-            orientation="h", marker_color="#2e7d32",
+            orientation="h", marker=dict(color="#00cc96", line=dict(width=0)),
             text=top5["MEDIA_GERAL"][::-1], textposition="outside",
-            hovertemplate="%{x:.1f}<extra></extra>", name="Top 5",
+            textfont=dict(size=11), hovertemplate="<b>%{y}</b><br>Media: %{x:.1f}<extra></extra>",
+            name="Top 5", width=0.6,
         ))
         fig_bar.add_trace(go.Bar(
             y=bottom5["SG_UF_PROVA"], x=bottom5["MEDIA_GERAL"],
-            orientation="h", marker_color="#d32f2f",
+            orientation="h", marker=dict(color="#ef553b", line=dict(width=0)),
             text=bottom5["MEDIA_GERAL"], textposition="outside",
-            hovertemplate="%{x:.1f}<extra></extra>", name="Bottom 5",
+            textfont=dict(size=11), hovertemplate="<b>%{y}</b><br>Media: %{x:.1f}<extra></extra>",
+            name="Bottom 5", width=0.6,
         ))
         fig_bar.update_layout(
-            title=dict(text="Top 5 e Bottom 5 Estados", font=dict(size=16)),
-            xaxis=dict(title="Media Geral"), yaxis=dict(title=None),
-            template="plotly_white", height=400, barmode="overlay",
-            legend=dict(orientation="h", y=-0.2),
-            margin=dict(t=50, b=40, l=100, r=40),
-            plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)"
+            xaxis=dict(title="Media Geral", showgrid=True, zeroline=False),
+            yaxis=dict(title=None, showgrid=False),
+            height=400, barmode="overlay",
+            legend=dict(orientation="h", y=-0.2, font=dict(size=11)),
+            margin=dict(t=30, b=60, l=100, r=50),
         )
         insight_bar = f"O estado com maior media e {muf['SG_UF_PROVA']} " \
                       f"e o com menor e {puf['SG_UF_PROVA']}. " \
                       f"A diferenca entre o 5o e o 1o colocado e de {round(top5['MEDIA_GERAL'].max() - top5['MEDIA_GERAL'].min(), 1)} pontos."
 
         if not df_regiao_f.empty:
-            fig_regiao = px.line(
-                df_regiao_f, x="NU_ANO", y="MEDIA_GERAL", color="DS_REGIAO",
-                markers=True,
-                color_discrete_map={
-                    "Norte": "#e53935", "Nordeste": "#f57c00",
-                    "Centro-Oeste": "#fbc02d", "Sudeste": "#388e3c",
-                    "Sul": "#1a237e"
-                },
-            )
-            fig_regiao.update_traces(line=dict(width=2.5), marker=dict(size=6))
+            region_colors = {
+                "Norte": "#ef553b", "Nordeste": "#ffa15a",
+                "Centro-Oeste": "#ffd86b", "Sudeste": "#00cc96",
+                "Sul": "#636efa"
+            }
+            fig_regiao = go.Figure()
+            for reg in ["Norte", "Nordeste", "Centro-Oeste", "Sudeste", "Sul"]:
+                dfr = df_regiao_f[df_regiao_f["DS_REGIAO"] == reg]
+                if not dfr.empty:
+                    c = region_colors.get(reg, "#999")
+                    fig_regiao.add_trace(go.Scatter(
+                        x=dfr["NU_ANO"], y=dfr["MEDIA_GERAL"],
+                        mode="lines+markers", name=reg,
+                        line=dict(width=3, color=c, shape="spline", smoothing=0.3),
+                        marker=dict(size=9, color=c, symbol="circle", line=dict(width=1.5, color="white")),
+                        hovertemplate=f"<b>{reg}</b><br>%{{x}}: %{{y:.1f}}<extra></extra>"
+                    ))
             fig_regiao.update_layout(
-                title=dict(text="Evolucao por Regiao", font=dict(size=16)),
-                xaxis=dict(title="Ano", dtick=1), yaxis=dict(title="Media Geral"),
-                template="plotly_white", height=400,
-                legend=dict(orientation="h", y=-0.3),
-                margin=dict(t=50, b=60, l=60, r=20),
-                plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
-                hovermode="x unified"
+                xaxis=dict(title="Ano", dtick=1, showgrid=True),
+                yaxis=dict(title="Media Geral", showgrid=True, zeroline=False),
+                height=420, margin=dict(b=90),
+                legend=dict(orientation="h", y=-0.35, font=dict(size=11)),
             )
             insight_reg = f"Sudeste e Sul tem as maiores medias. " \
                           f"Norte e Nordeste ficam abaixo da media nacional. " \
@@ -664,16 +683,15 @@ def build_geografico(anos):
             ranking_df_display["Media"] = ranking_df_display["Media"].round(1)
             fig_table = go.Figure(data=[go.Table(
                 header=dict(values=["#", "Estado", "Media", "Participantes"],
-                            fill_color="#1a237e", font=dict(color="white", size=12),
-                            align="center"),
+                            fill_color="#636efa", font=dict(color="white", size=12, family="Segoe UI"),
+                            align="center", height=30),
                 cells=dict(values=[ranking_df_display[c] for c in ranking_df_display.columns],
-                           fill_color=[["#f8f9fa", "white"] * len(ranking_df_display)],
-                           align="center", font=dict(size=11), height=25)
+                           fill_color=[["rgba(99,110,250,0.06)", "rgba(99,110,250,0.02)"] * len(ranking_df_display)],
+                           align="center", font=dict(size=11, color="#333"), height=26,
+                           line=dict(color="rgba(0,0,0,0.04)")),
             )])
             fig_table.update_layout(
-                title=dict(text="Ranking Completo de Estados", font=dict(size=16)),
-                height=450, margin=dict(t=40, b=10, l=10, r=10),
-                paper_bgcolor="rgba(0,0,0,0)"
+                height=450, margin=dict(t=10, b=10, l=10, r=10),
             )
             insight_rank = f"Sao {len(ranking_df)} estados/DF analisados. " \
                            f"O top 3 e composto por {ranking_df['SG_UF_PROVA'].iloc[0]}, " \
@@ -710,12 +728,14 @@ def build_demografico(anos):
                 color="MEDIA_GERAL", color_continuous_scale="Viridis",
                 text_auto=".1f", height=420, title=None,
             )
-            fig_renda.update_traces(marker_line=dict(width=0))
+            fig_renda.update_traces(marker=dict(line=dict(width=0)),
+                                    textfont=dict(size=10, color="white"),
+                                    hovertemplate="<b>%{x}</b><br>Media: %{y:.1f}<extra></extra>")
             fig_renda.update_layout(
-                xaxis=dict(title=None, tickangle=-45), yaxis=dict(title="Media Geral"),
-                template="plotly_white", coloraxis_showscale=False,
-                margin=dict(t=20, b=120, l=60, r=20),
-                plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)"
+                xaxis=dict(title=None, tickangle=-40, showgrid=False),
+                yaxis=dict(title="Media Geral", showgrid=True, zeroline=False),
+                coloraxis_showscale=False,
+                margin=dict(t=20, b=140, l=60, r=20),
             )
             renda_min = df_renda.iloc[0]
             renda_max = df_renda.iloc[-1]
@@ -727,24 +747,28 @@ def build_demografico(anos):
             insight_renda = ""
 
         if not df_cor_f.empty:
-            fig_cor = px.line(
-                df_cor_f, x="NU_ANO", y="MEDIA_GERAL", color="DS_COR_RACA",
-                markers=True,
-                color_discrete_map={
-                    "Branca": "#3949ab", "Preta": "#1a237e",
-                    "Parda": "#f57c00", "Amarela": "#00897b",
-                    "Indigena": "#6d4c41", "Nao declarado": "#90a4ae",
-                },
-            )
-            fig_cor.update_traces(line=dict(width=2.5), marker=dict(size=6))
+            race_colors = {
+                "Branca": "#636efa", "Preta": "#1a237e",
+                "Parda": "#ffa15a", "Amarela": "#00cc96",
+                "Indigena": "#ef553b", "Nao declarado": "#b0bec5",
+            }
+            fig_cor = go.Figure()
+            for cor_name in ["Branca", "Preta", "Parda", "Amarela", "Indigena", "Nao declarado"]:
+                dfc = df_cor_f[df_cor_f["DS_COR_RACA"] == cor_name]
+                if not dfc.empty:
+                    c = race_colors.get(cor_name, "#b0bec5")
+                    fig_cor.add_trace(go.Scatter(
+                        x=dfc["NU_ANO"], y=dfc["MEDIA_GERAL"],
+                        mode="lines+markers", name=cor_name,
+                        line=dict(width=3, color=c, shape="spline", smoothing=0.3),
+                        marker=dict(size=8, color=c, symbol="circle", line=dict(width=1.5, color="white")),
+                        hovertemplate=f"<b>{cor_name}</b><br>%{{x}}: %{{y:.1f}}<extra></extra>"
+                    ))
             fig_cor.update_layout(
-                title=dict(text="Evolucao por Raca/Cor", font=dict(size=16)),
-                xaxis=dict(title="Ano", dtick=1), yaxis=dict(title="Media Geral"),
-                template="plotly_white", height=420,
-                legend=dict(orientation="h", y=-0.3),
-                margin=dict(t=50, b=60, l=60, r=20),
-                plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
-                hovermode="x unified"
+                xaxis=dict(title="Ano", dtick=1, showgrid=True),
+                yaxis=dict(title="Media Geral", showgrid=True, zeroline=False),
+                height=420, margin=dict(b=90),
+                legend=dict(orientation="h", y=-0.35, font=dict(size=10)),
             )
             medias_cor = df_cor_f.groupby("DS_COR_RACA")["MEDIA_GERAL"].mean()
             gap_cor = round(medias_cor.get("Branca", 0) - medias_cor.get("Preta", 0), 1)
@@ -755,6 +779,7 @@ def build_demografico(anos):
             insight_cor = ""
 
         if not df_sexo_f.empty:
+            sexo_colors = {"Masculino": "#636efa", "Feminino": "#ef553b"}
             fig_sexo = go.Figure()
             for sexo in ["Feminino", "Masculino"]:
                 dfs = df_sexo_f[df_sexo_f["DS_SEXO"] == sexo]
@@ -762,18 +787,16 @@ def build_demografico(anos):
                     fig_sexo.add_trace(go.Scatter(
                         x=dfs["NU_ANO"], y=dfs["MEDIA_GERAL"],
                         mode="lines+markers", name=sexo,
-                        line=dict(width=3, color="#e53935" if sexo == "Feminino" else "#3949ab"),
-                        marker=dict(size=8),
-                        hovertemplate=f"{sexo}: %{{y:.1f}}<extra></extra>"
+                        line=dict(width=3, color=sexo_colors[sexo], shape="spline", smoothing=0.3),
+                        marker=dict(size=9, color=sexo_colors[sexo],
+                                    symbol="circle", line=dict(width=2, color="white")),
+                        hovertemplate=f"<b>{sexo}</b><br>%{{x}}: %{{y:.1f}}<extra></extra>"
                     ))
             fig_sexo.update_layout(
-                title=dict(text="Evolucao por Sexo", font=dict(size=16)),
-                xaxis=dict(title="Ano", dtick=1), yaxis=dict(title="Media Geral"),
-                template="plotly_white", height=420,
-                legend=dict(orientation="h", y=-0.2),
-                margin=dict(t=50, b=60, l=60, r=20),
-                plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
-                hovermode="x unified"
+                xaxis=dict(title="Ano", dtick=1, showgrid=True),
+                yaxis=dict(title="Media Geral", showgrid=True, zeroline=False),
+                height=420, margin=dict(b=60),
+                legend=dict(orientation="h", y=-0.2, font=dict(size=11)),
             )
             medias_sexo = df_sexo_f.groupby("DS_SEXO")["MEDIA_GERAL"].mean()
             if "Feminino" in medias_sexo and "Masculino" in medias_sexo:
@@ -791,21 +814,23 @@ def build_demografico(anos):
             gap_data = df_sexo_f.pivot_table(index="NU_ANO", columns="DS_SEXO", values="MEDIA_GERAL")
             if "Masculino" in gap_data.columns and "Feminino" in gap_data.columns:
                 gap_vals = gap_data["Masculino"] - gap_data["Feminino"]
+                gap_sex_colors = ["#00cc96" if v >= 0 else "#ef553b" for v in gap_vals.values]
                 fig_gap_sexo.add_trace(go.Bar(
                     x=gap_vals.index, y=gap_vals.values,
-                    marker_color=gap_vals.apply(lambda v: "#e53935" if v > 0 else "#2e7d32"),
+                    marker=dict(color=gap_sex_colors, line=dict(width=0), opacity=0.85),
                     text=gap_vals.round(1), textposition="outside",
-                    hovertemplate="Gap: %{y:.1f} pts<extra></extra>",
+                    textfont=dict(size=11, color="#333"),
+                    hovertemplate="<b>%{x}</b><br>Gap: %{y:.1f} pts<extra></extra>",
                     showlegend=False
                 ))
-                fig_gap_sexo.add_hline(y=gap_vals.mean(), line_dash="dash", line_color="#666",
-                                       annotation_text=f"Media: {gap_vals.mean():.1f}")
+                mean_gap = gap_vals.mean()
+                fig_gap_sexo.add_hline(y=mean_gap, line_dash="dash", line_color="#999",
+                                       annotation_text=f"Media: {mean_gap:.1f}",
+                                       annotation_font=dict(size=11, color="#666"))
                 fig_gap_sexo.update_layout(
-                    title=dict(text="Diferenca Homem - Mulher (pontos)", font=dict(size=16)),
-                    xaxis=dict(title="Ano", dtick=1), yaxis=dict(title="Diferenca (pts)"),
-                    template="plotly_white", height=400,
-                    margin=dict(t=50, b=60, l=60, r=20),
-                    plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)"
+                    xaxis=dict(title="Ano", dtick=1, showgrid=False),
+                    yaxis=dict(title="Diferenca (pts)", showgrid=True),
+                    height=400,
                 )
                 insight_gap_sexo = f"Homens pontuam em media {gap_vals.mean():.1f} pts acima das mulheres. " \
                                    f"O maior gap foi em {gap_vals.idxmax():.0f} ({gap_vals.max():.1f} pts)."
@@ -852,32 +877,46 @@ def build_insights(anos):
         return dbc.Alert("Sem dados.", color="warning")
     try:
         df_ano = get_media_por_ano()
-        df_f = _filter_by_years(df_ano, selected=anos)
+        df_ano_f = _filter_by_years(df_ano, selected=anos)
         stats = get_stats_por_ano()
         stats_f = _filter_by_years(stats, selected=anos)
-        variacao, primeiro, ultimo = get_tendencia_media_geral()
+        if len(df_ano_f) >= 2:
+            primeiro_valor = df_ano_f["MEDIA_GERAL"].iloc[0]
+            ultimo_valor = df_ano_f["MEDIA_GERAL"].iloc[-1]
+            variacao = round(((ultimo_valor - primeiro_valor) / primeiro_valor) * 100, 2)
+            primeiro = round(primeiro_valor, 1)
+            ultimo = round(ultimo_valor, 1)
+        else:
+            variacao = 0.0
+            primeiro = 0
+            ultimo = 0
 
-        col_medias = [c for c in ["MEDIA_CN", "MEDIA_CH", "MEDIA_LC", "MEDIA_MT", "MEDIA_REDACAO"] if c in df_ano.columns]
-        media_todas = [round(df_ano[col].mean(), 1) for col in col_medias] if col_medias else [0] * 5
+        col_medias = [c for c in ["MEDIA_CN", "MEDIA_CH", "MEDIA_LC", "MEDIA_MT", "MEDIA_REDACAO"] if c in df_ano_f.columns]
+        media_todas = [round(df_ano_f[col].mean(), 1) for col in col_medias] if col_medias else [0] * 5
 
         fig_ranking = go.Figure()
         if media_todas:
+            sorted_idx = sorted(range(len(media_todas)), key=lambda i: media_todas[i], reverse=True)
+            sorted_labels = [DISCIPLINAS_LABELS[i] for i in sorted_idx]
+            sorted_values = [media_todas[i] for i in sorted_idx]
+            sorted_colors = [DISCIPLINAS_CORES[i] for i in sorted_idx]
             fig_ranking.add_trace(go.Bar(
-                x=DISCIPLINAS_LABELS, y=media_todas,
-                marker_color=DISCIPLINAS_CORES,
-                text=media_todas, textposition="auto", textfont=dict(size=14, color="white"),
-                hovertemplate="%{x}: %{y}<extra></extra>",
+                x=sorted_labels, y=sorted_values,
+                marker_color=sorted_colors,
+                text=sorted_values, textposition="auto", textfont=dict(size=14, color="white"),
+                hovertemplate="<b>%{x}</b><br>Media: %{y}<extra></extra>",
                 showlegend=False
             ))
         fig_ranking.update_layout(
-            title=dict(text="Ranking de Medias por Disciplina (todos os anos)", font=dict(size=16)),
-            yaxis=dict(title="Media"), template="plotly_white", height=400,
-            margin=dict(t=50, b=40, l=60, r=20),
+            title=dict(text="Ranking de Medias por Disciplina", font=dict(size=16)),
+            yaxis=dict(title="Media", showgrid=True, zeroline=False),
+            template="plotly_white", height=420,
+            margin=dict(t=50, b=40, l=60, r=40),
             plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)"
         )
 
-        melhor_ano = df_ano.loc[df_ano["MEDIA_GERAL"].idxmax()] if not df_ano.empty else None
-        pior_ano = df_ano.loc[df_ano["MEDIA_GERAL"].idxmin()] if not df_ano.empty else None
+        melhor_ano = df_ano_f.loc[df_ano_f["MEDIA_GERAL"].idxmax()] if not df_ano_f.empty else None
+        pior_ano = df_ano_f.loc[df_ano_f["MEDIA_GERAL"].idxmin()] if not df_ano_f.empty else None
 
         df_esc = get_media_por_escola()
         media_privada = round(df_esc[df_esc["DS_ESCOLA"] == "Privada"]["MEDIA_GERAL"].mean(), 1) if "Privada" in df_esc["DS_ESCOLA"].values else 0
@@ -893,21 +932,21 @@ def build_insights(anos):
             melhor_uf_str = f"{muf['SG_UF_PROVA']} ({muf['MEDIA_GERAL']})"
             pior_uf_str = f"{puf['SG_UF_PROVA']} ({puf['MEDIA_GERAL']})"
             df_rank = df_uf.sort_values("MEDIA_GERAL", ascending=True)
-            cores_uf = ["#e53935"] * 3 + ["#fbc02d"] * (len(df_rank) - 6) + ["#2e7d32"] * 3
-            if len(cores_uf) < len(df_rank):
-                cores_uf = ["#fbc02d"] * len(df_rank)
+            n = len(df_rank)
+            cores_uf = px.colors.sequential.Viridis
+            colors_rank = [cores_uf[int(i * (len(cores_uf)-1) / max(n-1, 1))] for i in range(n)]
             ranking_fig.add_trace(go.Bar(
                 y=df_rank["SG_UF_PROVA"], x=df_rank["MEDIA_GERAL"],
-                orientation="h", marker_color=cores_uf[:len(df_rank)],
+                orientation="h", marker=dict(color=colors_rank, line=dict(width=0)),
                 text=df_rank["MEDIA_GERAL"], textposition="outside",
-                hovertemplate="%{x:.1f}<extra></extra>", showlegend=False
+                textfont=dict(size=11), hovertemplate="<b>%{y}</b><br>Media: %{x:.1f}<extra></extra>",
+                showlegend=False, width=0.7,
             ))
             ranking_fig.update_layout(
-                title=dict(text="Ranking de Estados por Media Geral", font=dict(size=16)),
-                xaxis=dict(title="Media Geral"), yaxis=dict(title=None),
-                template="plotly_white", height=500,
-                margin=dict(t=50, b=40, l=100, r=40),
-                plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)"
+                xaxis=dict(title="Media Geral", showgrid=True, zeroline=False),
+                yaxis=dict(title=None, showgrid=False),
+                height=max(400, len(df_rank) * 30),
+                margin=dict(t=30, b=30, l=100, r=60),
             )
             insight_rank = f"{muf['SG_UF_PROVA']} lidera o ranking com {muf['MEDIA_GERAL']}. " \
                            f"{puf['SG_UF_PROVA']} esta na ultima posicao com {puf['MEDIA_GERAL']}. " \
@@ -936,8 +975,8 @@ def build_insights(anos):
                     html.Div([html.H6("Pior estado:", className="d-inline text-muted"),
                               html.Span(f" {pior_uf_str}", className="fw-bold ms-1 text-danger")], className="mb-2"),
                     html.Hr(),
-                    _insight_box(f"Analisados {total_records:,} registros de {len(df_ano)} anos "
-                                f"({int(df_ano['NU_ANO'].min()):.0f}-{int(df_ano['NU_ANO'].max()):.0f}). "
+                    _insight_box(f"Analisados {total_records:,} registros de {len(df_ano_f)} anos "
+                                f"({int(df_ano_f['NU_ANO'].min()):.0f}-{int(df_ano_f['NU_ANO'].max()):.0f}). "
                                 f"A media geral variou {variacao:+.2f}% no periodo."),
                 ])
             ], className=ESTILO_CARD), width=4),
@@ -961,8 +1000,8 @@ def build_insights(anos):
             ], className=ESTILO_CARD), width=8),
 
             _card_w_graph("Ranking de Disciplinas (media historica)", fig_ranking,
-                          f"Redacao tem a maior media ({media_todas[4]}) e Ciencias da Natureza "
-                          f"a menor ({media_todas[0]}). Matematica e a segunda menor.", 12),
+                          f"Redacao tem a maior media ({media_todas[4] if len(media_todas) > 4 else 'N/A'}) e Ciencias da Natureza "
+                          f"a menor ({media_todas[0] if len(media_todas) > 0 else 'N/A'}). Matematica e a segunda menor.", 12),
 
             _card_w_graph("Ranking de Estados", ranking_fig, insight_rank, 12),
 
